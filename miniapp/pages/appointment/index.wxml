@@ -10,7 +10,7 @@
   </view>
   <view wx:if="{{!editMode}}" class="sub">仅用于已经通过审核的流浪猫TNR申请。</view>
   <view class="sub" style="margin-top:8rpx;padding:16rpx;background:#edf5f0;border-radius:4rpx;border:1rpx solid #b9cec2;font-size:26rpx;color:#1d4d3a;line-height:1.6;">
-    <text style="font-weight:700;">预约前提：</text>请先在首页提交TNR申请。审核通过后，可从“我的TNR申请 / 查看进度”进入本页面预约手术。若自提交之日起 3 个月内仍未完成手术，且没有尚未到来的手术预约，申请会进入隔离区，届时不能从该申请预约，需重新提交资料并经医院审核。
+    <text style="font-weight:700;">预约前提：</text>请先在首页提交TNR申请。审核通过后，可从“我的TNR申请 / 查看进度”进入本页面预约手术。若自提交之日起 3 个月内仍未完成手术，且没有尚未到来的手术预约，申请会进入隔离区，届时不能从该申请预约，需重新提交近照并经医院审核。审核通过后即可预约。
   </view>
   <view class="sub" style="margin-top:8rpx;padding:16rpx;background:#faf4e8;border-radius:4rpx;border:1rpx solid #d8d4cc;font-size:26rpx;color:#6b4423;line-height:1.6;">
     普通门诊、疫苗、驱虫、手术、美容及洗护暂不提供小程序自主预约，请通过微信联系医院，由工作人员安排并录入系统。

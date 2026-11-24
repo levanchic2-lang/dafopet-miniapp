@@ -2,7 +2,7 @@
 
 按北京时间的日历月计算：提交日加 3 个月仍未完成手术，且没有尚未到来的
 手术预约，就从当前状态转入 ``quarantined``。已预约、日期在今天或以后的
-手术不打断。重新申请只追加新资料，旧照片和字段快照留在原申请上。
+手术不打断。重新申请只换近照，毛色和体重不动；旧照片留在原申请上供对照。
 """
 
 from __future__ import annotations
@@ -38,19 +38,19 @@ MIN_RESTART_IMAGES = 2
 
 IDLE_NOTICE = (
     "若自申请提交之日起 3 个月内仍未完成手术，该申请将进入隔离区。"
-    "进入隔离区后不能直接预约；如需继续，须重新提交猫咪近照和最新资料"
-    "（毛色、体型等可能已变化），并经医院审核通过。"
+    "进入隔离区后不能直接预约；如需继续，须重新提交猫咪近照，并经医院审核通过。"
+    "审核通过后即可预约。毛色、体型沿用原申请，体重到院测量。"
 )
 QUARANTINED_NOTICE = (
-    "该申请已进入隔离区，暂不能预约手术。请点「重新申请」，更新猫咪近照、"
-    "体型和毛色等资料后再提交。医院审核通过后，才会重新进入正常流程。"
+    "该申请已进入隔离区，暂不能预约手术。请点「重新申请」，更新猫咪近照后再提交。"
+    "医院审核通过后即可预约。毛色和体型不用重填，体重到院再量。"
 )
 RESTART_PENDING_NOTICE = (
     "重新申请已提交，正在等待医院审核。审核通过前不能预约手术；"
     "若未通过，申请仍留在隔离区。"
 )
 BOOKING_BLOCKED_QUARANTINE = (
-    "该申请已进入隔离区，暂不能预约手术。请先重新提交猫咪近照和资料，并等待医院审核。"
+    "该申请已进入隔离区，暂不能预约手术。请先重新提交猫咪近照，并等待医院审核。"
 )
 BOOKING_BLOCKED_RESTART = "重新申请正在等待医院审核，通过前不能预约手术。"
 
@@ -78,7 +78,6 @@ _SURGERY_CATEGORIES = {
     AppointmentCategory.tnr.value,
     AppointmentCategory.surgery.value,
 }
-_CAT_GENDERS = {"male", "female", "unknown"}
 _STATUS_ZH = {
     ApplicationStatus.draft.value: "草稿",
     ApplicationStatus.pending_ai.value: "系统处理中",
@@ -313,34 +312,6 @@ def mark_submitted(row: Application, when: datetime | None = None) -> None:
         row.original_submitted_at = row.submitted_at
 
 
-def _clean_text(raw, limit: int) -> str:
-    return str(raw or "").strip()[:limit]
-
-
-def clean_restart_fields(raw: dict) -> dict:
-    nickname = _clean_text(raw.get("cat_nickname"), 120)
-    if not nickname:
-        raise QuarantineError("请填写猫咪名字。")
-    gender = _clean_text(raw.get("cat_gender"), 20).lower()
-    if gender not in _CAT_GENDERS:
-        raise QuarantineError("请选择猫咪性别。")
-    color = _clean_text(raw.get("cat_color"), 80)
-    if not color:
-        raise QuarantineError("请填写毛色。猫咪相隔数月，毛色可能已经变化。")
-    weight = _clean_text(raw.get("weight_estimate"), 80)
-    if not weight:
-        raise QuarantineError("请填写体型或体重。")
-    return {
-        "cat_nickname": nickname,
-        "cat_gender": gender,
-        "cat_breed": _clean_text(raw.get("cat_breed"), 80),
-        "cat_color": color,
-        "age_estimate": _clean_text(raw.get("age_estimate"), 80),
-        "weight_estimate": weight,
-        "health_note": _clean_text(raw.get("health_note"), 2000),
-    }
-
-
 def _clear_pending_media(db: Session, row: Application) -> None:
     pending = (
         db.query(MediaFile)
@@ -360,34 +331,31 @@ def _clear_pending_media(db: Session, row: Application) -> None:
         db.delete(media)
 
 
-def begin_restart(db: Session, row: Application, raw: dict) -> dict:
+def begin_restart(db: Session, row: Application, raw: dict | None = None) -> dict:
+    """重新申请只换近照。请求里的毛色、体型、体重一律不写入。"""
+    del raw
     if row.status == ApplicationStatus.quarantine_restart_pending.value:
         raise QuarantineError("重新申请已提交，请等待医院审核。")
     if row.status != ApplicationStatus.quarantined.value:
         raise QuarantineError("当前申请不在隔离区，无需重新申请。")
-    fields = clean_restart_fields(raw)
     _clear_pending_media(db, row)
-    row.restart_draft_json = json.dumps(fields, ensure_ascii=False)
+    marker = {"photos_only": True}
+    row.restart_draft_json = json.dumps(marker, ensure_ascii=False)
     row.updated_at = datetime.utcnow()
     db.commit()
-    return fields
+    return marker
 
 
 def assert_restart_upload(row: Application) -> None:
     if row.status != ApplicationStatus.quarantined.value or not (row.restart_draft_json or "").strip():
-        raise QuarantineError("请先保存猫咪的最新资料，再上传近照。")
+        raise QuarantineError("请先开始重新申请，再上传近照。")
 
 
 def finalize_restart(db: Session, row: Application) -> None:
     if row.status != ApplicationStatus.quarantined.value:
         raise QuarantineError("当前申请不在隔离区，不能提交重新申请。")
-    try:
-        fields = json.loads(row.restart_draft_json or "{}")
-    except (TypeError, ValueError):
-        fields = {}
-    if not isinstance(fields, dict) or not fields:
-        raise QuarantineError("请先填写猫咪的最新资料。")
-    fields = clean_restart_fields(fields)
+    if not (row.restart_draft_json or "").strip():
+        raise QuarantineError("请先开始重新申请，再提交近照。")
     pending_images = (
         db.query(MediaFile)
         .filter(
@@ -451,8 +419,6 @@ def finalize_restart(db: Session, row: Application) -> None:
     for media in pending_videos:
         media.is_current = True
         media.restart_pending = False
-    for key, value in fields.items():
-        setattr(row, key, value)
     row.status = ApplicationStatus.quarantine_restart_pending.value
     row.restart_draft_json = ""
     row.restart_reject_reason = ""
@@ -463,9 +429,7 @@ def finalize_restart(db: Session, row: Application) -> None:
         actor="customer",
         application_id=row.id,
         detail=json.dumps({
-            "cat_nickname": fields["cat_nickname"],
-            "cat_color": fields["cat_color"],
-            "weight_estimate": fields["weight_estimate"],
+            "photos_only": True,
             "new_image_ids": [media.id for media in pending_images],
             "previous_media_ids": snapshot["media_ids"],
         }, ensure_ascii=False),
@@ -477,7 +441,7 @@ def approve_restart(db: Session, row: Application, actor: str) -> None:
     if row.status != ApplicationStatus.quarantine_restart_pending.value:
         raise QuarantineError("只有「隔离区·待审核」的重新申请可以通过。")
     now = datetime.utcnow()
-    row.status = ApplicationStatus.pending_manual.value
+    row.status = ApplicationStatus.approved.value
     row.submitted_at = now
     if row.original_submitted_at is None:
         row.original_submitted_at = now
@@ -487,7 +451,7 @@ def approve_restart(db: Session, row: Application, actor: str) -> None:
         action="quarantine_restart_approve",
         actor=(actor or "admin")[:80],
         application_id=row.id,
-        detail="重新申请通过，回到待人工审核。通过后救助人才能预约手术。",
+        detail="重新申请通过，申请已通过，救助人可以直接预约手术。",
     ))
     db.commit()
 

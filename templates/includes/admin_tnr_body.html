@@ -268,16 +268,16 @@
    {% if a.quarantined_at %} · 进入隔离区：{{ (a.quarantined_at | bjtime).strftime('%Y-%m-%d') }}{% endif %}
    {% if a.status_before_quarantine %} · 进入前：{{ STATUS_ZH.get(a.status_before_quarantine, a.status_before_quarantine) }}{% endif %}
   </div>
-  <div class="sub" style="margin:0.2rem 0 0;">当前资料：毛色 {{ a.cat_color or '—' }} · 体型/体重 {{ a.weight_estimate or '—' }}</div>
+  <div class="sub" style="margin:0.2rem 0 0;">重新申请只更换近照。毛色、体型沿用原申请，体重到院测量。旧照片保留在下方，供对照。</div>
   {% if snap %}
-  <div class="sub" style="margin:0.2rem 0 0;">重新申请前保留：名字 {{ snap.get('cat_nickname') or '—' }} · 毛色 {{ snap.get('cat_color') or '—' }} · 体型/体重 {{ snap.get('weight_estimate') or '—' }}。旧照片仍在下方，供对照。</div>
+  <div class="sub" style="margin:0.2rem 0 0;">已保留重新申请前的照片。</div>
   {% endif %}
   {% if a.status == 'quarantined' and a.restart_reject_reason %}
   <div class="sub" style="margin:0.2rem 0 0;">上次重新申请未通过：{{ a.restart_reject_reason }}</div>
   {% endif %}
  </div>
  {% elif a.restart_count %}
- <p class="sub" style="margin:0.45rem 0 0;">该申请曾进入隔离区，重新申请已通过 {{ a.restart_count }} 次，请对照历史照片复核。</p>
+ <p class="sub" style="margin:0.45rem 0 0;">该申请曾进入隔离区，重新申请已通过 {{ a.restart_count }} 次，现可预约。历史照片仍保留，可对照。</p>
  {% endif %}
  <p>
  门店：<strong>{{ a.clinic_store or '未选' }}</strong>
@@ -648,10 +648,10 @@
  </form>
  {% endif %}
  {% if a.status == 'quarantine_restart_pending' %}
- <p class="sub" style="margin:0;">救助人已更新近照和猫咪资料。通过后申请回到「待人工审核」，再按正常流程复核、通过后才能预约。不通过则留在隔离区，仍然不能预约。</p>
+ <p class="sub" style="margin:0;">救助人已更新近照。通过后申请直接变为已通过，可以预约手术，不必再人工审核一次。不通过则留在隔离区，仍然不能预约。</p>
  <form method="post" action="/admin/app/{{ a.id }}/quarantine-restart/approve">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
- <button type="submit">通过重新申请，回到待审核</button>
+ <button type="submit">通过重新申请，可以预约</button>
  </form>
  <form method="post" action="/admin/app/{{ a.id }}/quarantine-restart/reject">
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
@@ -662,7 +662,7 @@
  </form>
  {% endif %}
  {% if a.status == 'quarantined' %}
- <p class="sub" style="margin:0;">隔离区申请不能预约手术。请等救助人在小程序更新近照和资料后再审核。</p>
+ <p class="sub" style="margin:0;">隔离区申请不能预约手术。请等救助人在小程序更新近照后再审核。</p>
  {% endif %}
  {% if a.status in ['pending_manual', 'pending_ai', 'pre_approved'] %}
  <form method="post" action="/admin/app/{{ a.id }}/manual-approve">

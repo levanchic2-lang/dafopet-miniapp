@@ -2655,7 +2655,7 @@ async def api_apply_create(
             raise HTTPException(
                 409,
                 f"「{f['cat_nickname']}」的申请已进入隔离区（编号 #{same_cat_dup.id}，当前状态：{status_label}）。"
-                f"请在原申请上点「重新申请」，更新近照和资料后等待医院审核，不要另开一份新申请。",
+                f"请在原申请上点「重新申请」，更新近照后等待医院审核，不要另开一份新申请。",
             )
         raise HTTPException(
             409,
@@ -3080,7 +3080,7 @@ async def api_restart_finalize(
         "id": row.id,
         "status": row.status,
         "status_zh": "隔离区·待审核",
-        "message": "重新申请已提交，请等待医院审核。审核通过前不能预约手术。",
+        "message": "重新申请已提交，请等待医院审核。审核通过后即可预约，通过前不能预约手术。",
     }
 
 

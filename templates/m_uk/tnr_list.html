@@ -56,7 +56,7 @@
 
 {% if quarantined_rows %}
 <div class="ukm-section-head"><h2>隔&nbsp;离&nbsp;区&nbsp;&nbsp;·&nbsp;{{ quarantined_rows|length }}</h2></div>
-<div class="ukm-fineprint" style="margin:0 16px 8px;">满 3 个月未完成手术，且没有未到期的手术预约。救助人可以看见，但不能预约，需重新提交资料后由医院审核。</div>
+<div class="ukm-fineprint" style="margin:0 16px 8px;">满 3 个月未完成手术，且没有未到期的手术预约。救助人可以看见，但不能预约，需重新提交近照后由医院审核。通过后即可预约。</div>
 <div class="ukm-row-group">
   {% for a in quarantined_rows %}
   <a class="ukm-row" href="/m/tnr/{{ a.id }}">

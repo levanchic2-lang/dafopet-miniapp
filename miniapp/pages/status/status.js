@@ -122,8 +122,8 @@ function nextActionText(info) {
   if (s === "rejected") return "可联系医院了解原因；如需继续，可补充材料后重新提交。";
   if (s === "cancelled") return "如需继续，请联系医院或重新提交申请。";
   if (s === "no_show") return "如需继续，请联系医院重新安排。";
-  if (s === "quarantined") return "请点「重新申请」，更新猫咪近照、体型和毛色后再提交。医院审核通过前不能预约。";
-  if (s === "quarantine_restart_pending") return "资料已提交，请等待医院审核。通过前不能预约手术。";
+  if (s === "quarantined") return "请点「重新申请」，上传猫咪近照后再提交。医院审核通过前不能预约，通过后即可预约。";
+  if (s === "quarantine_restart_pending") return "近照已提交，请等待医院审核。通过后即可预约，通过前不能预约手术。";
   return "请联系医院确认进度。";
 }
 

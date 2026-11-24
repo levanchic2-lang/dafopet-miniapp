@@ -219,18 +219,14 @@ try:
     plain = reload(past.id)
     expect_error(lambda: approve_restart(db, plain, "staff"))
     expect_error(lambda: begin_restart(db, reload(fresh.id), {
-        "cat_nickname": "未到期",
-        "cat_gender": "female",
         "cat_color": "三花",
         "weight_estimate": "4公斤",
     }))
 
     begin_restart(db, due, {
-        "cat_nickname": "到期猫",
-        "cat_gender": "female",
+        "cat_nickname": "不该改名",
         "cat_color": "三花",
         "weight_estimate": "4公斤",
-        "health_note": "比三个月前壮了一些",
     })
     only_one = add_media(due, "only-one.jpg", b"one", current=False, pending=True)
     err = expect_error(lambda: finalize_restart(db, reload(due.id)))
@@ -247,8 +243,9 @@ try:
     finalize_restart(db, reload(due.id))
     due = reload(due.id)
     assert due.status == ApplicationStatus.quarantine_restart_pending.value
-    assert due.cat_color == "三花"
-    assert due.weight_estimate == "4公斤"
+    assert due.cat_nickname == "到期猫"
+    assert due.cat_color == old_color == "黑白"
+    assert due.weight_estimate == "3公斤"
     assert due.restart_count == 1
     assert booking_block_message(due) == BOOKING_BLOCKED_RESTART
     assert customer_may_book(due) is False
@@ -269,16 +266,20 @@ try:
     assert len(revisions) == 1
     snapshot = json.loads(revisions[0].snapshot_json)
     assert snapshot["cat_color"] == "黑白"
+    assert snapshot["weight_estimate"] == "3公斤"
     assert old_photo.id in snapshot["media_ids"]
     assert due.latest_restart_snapshot()["weight_estimate"] == "3公斤"
 
     approve_restart(db, due, "前台")
     due = reload(due.id)
-    assert due.status == ApplicationStatus.pending_manual.value
+    assert due.status == ApplicationStatus.approved.value
     assert due.original_submitted_at == original_submitted
     assert due.submitted_at is not None and due.submitted_at > original_submitted
+    assert due.cat_color == "黑白"
+    assert due.weight_estimate == "3公斤"
     assert booking_block_message(due) is None
-    assert customer_may_book(due) is False
+    assert customer_may_book(due) is True
+    assert prepare_for_booking(db, due, now=NOW) is None
     assert db.query(AuditLog).filter(AuditLog.action == "quarantine_restart_approve", AuditLog.application_id == due.id).count() == 1
 
     due.submitted_at = utc_noon(date(2026, 8, 24))
@@ -286,14 +287,13 @@ try:
     assert scan_idle_applications(db, now=NOW) >= 1
     due = reload(due.id)
     assert due.status == ApplicationStatus.quarantined.value
-    assert due.cat_color == "三花"
+    assert due.cat_color == "黑白"
+    assert due.weight_estimate == "3公斤"
     assert not db.get(MediaFile, old_photo.id).is_current
 
     reject_app = reload(cancelled_future.id)
     old_reject_photo = add_media(reject_app, "reject-old.jpg", b"reject-old")
     begin_restart(db, reject_app, {
-        "cat_nickname": "取消的预约",
-        "cat_gender": "male",
         "cat_color": "橘白",
         "weight_estimate": "偏瘦",
     })
@@ -305,7 +305,9 @@ try:
     reject_app = reload(reject_app.id)
     assert reject_app.status == ApplicationStatus.quarantined.value
     assert reject_app.restart_reject_reason == "近照看不清猫咪"
-    assert reject_app.cat_color == "橘白"
+    assert reject_app.cat_nickname == "取消的预约"
+    assert reject_app.cat_color == "黑白"
+    assert reject_app.weight_estimate == "3公斤"
     assert not db.get(MediaFile, old_reject_photo.id).is_current
     assert Path(db.get(MediaFile, old_reject_photo.id).stored_path).read_bytes() == b"reject-old"
     assert booking_block_message(reject_app) == BOOKING_BLOCKED_QUARANTINE

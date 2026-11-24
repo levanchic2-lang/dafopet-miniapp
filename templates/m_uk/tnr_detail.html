@@ -53,15 +53,14 @@
   <div class="ukm-card" style="border-left:2px solid var(--accent-amber);">
     <div class="ukm-card-title" style="color:var(--accent-amber);">隔&nbsp;离&nbsp;区</div>
     <div class="ukm-card-sub">
-      {% if row.status == 'quarantine_restart_pending' %}救助人已更新近照和资料，等待审核。通过后回到待人工审核，再按正常流程复核；不通过则留在隔离区，不能预约。
-      {% else %}提交已满 3 个月且手术未完成。救助人仍可查看，但不能预约。请等其重新提交近照、体型和毛色后再审。{% endif %}
+      {% if row.status == 'quarantine_restart_pending' %}救助人已更新近照，等待审核。通过后即可预约，不必再人工审核一次；不通过则留在隔离区，不能预约。
+      {% else %}提交已满 3 个月且手术未完成。救助人仍可查看，但不能预约。请等其重新提交近照后再审。毛色、体型沿用原申请。{% endif %}
     </div>
     {% if row.restart_reject_reason and row.status == 'quarantined' %}
     <div class="ukm-card-sub">上次未通过：{{ row.restart_reject_reason }}</div>
     {% endif %}
-    {% set snap = row.latest_restart_snapshot() %}
-    {% if snap %}
-    <div class="ukm-card-sub">重新申请前：毛色 {{ snap.get('cat_color') or '—' }} · 体型/体重 {{ snap.get('weight_estimate') or '—' }}</div>
+    {% if row.latest_restart_snapshot() %}
+    <div class="ukm-card-sub">重新申请前的照片保留在下方，供对照。</div>
     {% endif %}
   </div>
 </div>
@@ -165,7 +164,7 @@
 {# 审核动作 #}
 {% if row.status == 'quarantine_restart_pending' %}
 <form method="post" action="/admin/app/{{ row.id }}/quarantine-restart/approve" style="margin-top:14px;"
-      onsubmit="return confirm('通过后回到待人工审核，仍需再复核一次才能预约。确认通过这份重新申请？')">
+      onsubmit="return confirm('通过后申请变为已通过，救助人可以直接预约。确认通过这份重新申请？')">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
   <input type="hidden" name="next_url" value="/m/tnr"/>
   <button type="submit" class="ukm-btn block">通&nbsp;过&nbsp;重&nbsp;新&nbsp;申&nbsp;请</button>

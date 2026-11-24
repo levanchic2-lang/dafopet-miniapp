@@ -1,36 +1,15 @@
 const { getJson, postJson, wxLoginCode } = require("../../utils/api");
 
-const GENDERS = [
-  { value: "male", label: "公猫" },
-  { value: "female", label: "母猫" },
-  { value: "unknown", label: "未知" }
-];
-
-function genderIndex(value) {
-  const idx = GENDERS.findIndex((item) => item.value === value);
-  return idx >= 0 ? idx : 2;
-}
-
 Page({
   data: {
     loading: true,
     loadError: "",
     error: "",
     submitting: false,
-    notice: "该申请已进入隔离区。更新近照和资料并经医院审核通过前，不能预约手术。",
+    notice: "该申请已进入隔离区。更新近照并经医院审核通过前，不能预约手术。审核通过后即可预约。",
     rejectReason: "",
-    genderOptions: GENDERS,
-    genderIndex: 2,
-    images: [],
-    form: {
-      cat_nickname: "",
-      cat_gender: "unknown",
-      cat_breed: "",
-      cat_color: "",
-      age_estimate: "",
-      weight_estimate: "",
-      health_note: ""
-    }
+    catName: "",
+    images: []
   },
 
   onLoad(query) {
@@ -56,41 +35,16 @@ Page({
         });
         return;
       }
-      const gender = info.cat_gender || "unknown";
       this.setData({
         loading: false,
         notice: info.quarantine_notice || this.data.notice,
         rejectReason: info.restart_reject_reason || "",
-        genderIndex: genderIndex(gender),
-        form: {
-          cat_nickname: info.cat_nickname || "",
-          cat_gender: gender,
-          cat_breed: info.cat_breed || "",
-          cat_color: info.cat_color || "",
-          age_estimate: info.age_estimate || "",
-          weight_estimate: info.weight_estimate || "",
-          health_note: info.health_note || ""
-        }
+        catName: info.cat_nickname || ""
       });
     } catch (err) {
       const detail = err && (err.detail || err.message);
       this.setData({ loading: false, loadError: detail || "读取申请失败，请稍后重试。" });
     }
-  },
-
-  onInput(e) {
-    const key = e.currentTarget.dataset.k;
-    this.setData({ [`form.${key}`]: e.detail.value });
-  },
-
-  onGender(e) {
-    const idx = Number(e.detail.value || 0);
-    const option = GENDERS[idx] || GENDERS[2];
-    this.setData({ genderIndex: idx, "form.cat_gender": option.value });
-  },
-
-  onAge(e) {
-    this.setData({ "form.age_estimate": e.detail.value || "" });
   },
 
   choosePhotos() {
@@ -131,19 +85,6 @@ Page({
 
   async submit() {
     if (this.data.submitting) return;
-    const form = this.data.form;
-    if (!String(form.cat_nickname || "").trim()) {
-      this.setData({ error: "请填写猫咪名字。" });
-      return;
-    }
-    if (!String(form.cat_color || "").trim()) {
-      this.setData({ error: "请填写毛色。" });
-      return;
-    }
-    if (!String(form.weight_estimate || "").trim()) {
-      this.setData({ error: "请填写体型或体重。" });
-      return;
-    }
     if ((this.data.images || []).length < 2) {
       this.setData({ error: "请至少上传 2 张猫咪近照。" });
       return;
@@ -151,10 +92,7 @@ Page({
     this.setData({ submitting: true, error: "" });
     try {
       const beginCode = await wxLoginCode();
-      await postJson(`/api/app/${encodeURIComponent(this.appId)}/restart/begin`, {
-        ...form,
-        code: beginCode
-      });
+      await postJson(`/api/app/${encodeURIComponent(this.appId)}/restart/begin`, { code: beginCode });
       for (const path of this.data.images) {
         const uploadCode = await wxLoginCode();
         await this.uploadOne(uploadCode, path);

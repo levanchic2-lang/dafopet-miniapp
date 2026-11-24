@@ -24,7 +24,7 @@ class ApplicationStatus(str, enum.Enum):
     surgery_completed = "surgery_completed"
     # 提交满 3 个月仍未完成手术，且没有未到期的手术预约。
     quarantined = "quarantined"
-    # 救助人已更新资料重新申请，等待员工人工放行。
+    # 救助人已更新近照重新申请，等待员工放行。通过后直接可预约。
     quarantine_restart_pending = "quarantine_restart_pending"
 
 
