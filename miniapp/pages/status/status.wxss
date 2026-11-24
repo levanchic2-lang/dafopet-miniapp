@@ -1,5 +1,22 @@
 .label { margin-top: 18rpx; font-size: 26rpx; font-weight: 700; }
 
+.idle-note, .quarantine-note {
+  margin-top: 12rpx;
+  padding: 16rpx 18rpx;
+  font-size: 24rpx;
+  line-height: 1.65;
+}
+.idle-note {
+  background: #f8f1e7;
+  border-left: 6rpx solid #6b4423;
+  color: #6b4423;
+}
+.quarantine-note {
+  background: #f8eded;
+  border-left: 6rpx solid #7a2828;
+  color: #7a2828;
+}
+
 .status-head {
   margin-top: 10rpx;
   display: flex;

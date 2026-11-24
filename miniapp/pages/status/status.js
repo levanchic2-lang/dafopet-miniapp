@@ -12,7 +12,9 @@ const STATUS_ZH = {
   surgery_completed: "手术已完成",
   rejected: "未通过",
   cancelled: "已取消",
-  no_show: "爽约"
+  no_show: "爽约",
+  quarantined: "隔离区",
+  quarantine_restart_pending: "隔离区·待审核"
 };
 
 const STATUS_DESC = {
@@ -25,7 +27,9 @@ const STATUS_DESC = {
   surgery_completed: "手术已完成，请按医嘱护理。",
   rejected: "未通过审核，可联系医院了解原因，必要时重新提交材料。",
   cancelled: "本次申请已取消，如需继续请联系医院或重新提交。",
-  no_show: "已标记爽约，如需继续请联系医院重新安排。"
+  no_show: "已标记爽约，如需继续请联系医院重新安排。",
+  quarantined: "申请已进入隔离区。可以查看，但不能预约手术。",
+  quarantine_restart_pending: "重新申请已提交，正在等待医院审核。"
 };
 
 const CHANNEL_ZH = {
@@ -58,6 +62,11 @@ function isTerminated(code) {
   return s === "rejected" || s === "cancelled" || s === "no_show";
 }
 
+function isQuarantine(code) {
+  const s = String(code || "").trim();
+  return s === "quarantined" || s === "quarantine_restart_pending";
+}
+
 function deriveStepIndex(code) {
   const s = String(code || "").trim();
   if (!s) return 0;
@@ -73,17 +82,18 @@ function deriveStepIndex(code) {
 
 function buildTimelineSteps(code) {
   const stepIndex = deriveStepIndex(code);
-  const terminated = isTerminated(code);
+  const quarantine = isQuarantine(code);
+  const halted = isTerminated(code) || quarantine;
   const currentStatusZh = statusZh(code);
   return FLOW_STEPS.map((step, idx) => {
     let state = "upcoming";
     if (idx < stepIndex) state = "done";
-    else if (idx === stepIndex) state = terminated ? "halted" : "current";
+    else if (idx === stepIndex) state = halted ? "halted" : "current";
     return {
       ...step,
       idx,
       state,
-      tag: state === "current" ? "当前" : state === "halted" ? "终止" : "",
+      tag: state === "current" ? "当前" : state === "halted" ? (quarantine ? "隔离" : "终止") : "",
       meta: idx === stepIndex && currentStatusZh && currentStatusZh !== step.label ? currentStatusZh : "",
       is_last: idx === FLOW_STEPS.length - 1,
       line_state: idx < stepIndex ? "done" : ""
@@ -112,6 +122,8 @@ function nextActionText(info) {
   if (s === "rejected") return "可联系医院了解原因；如需继续，可补充材料后重新提交。";
   if (s === "cancelled") return "如需继续，请联系医院或重新提交申请。";
   if (s === "no_show") return "如需继续，请联系医院重新安排。";
+  if (s === "quarantined") return "请点「重新申请」，上传猫咪近照后再提交。医院审核通过前不能预约，通过后即可预约。";
+  if (s === "quarantine_restart_pending") return "近照已提交，请等待医院审核。通过后即可预约，通过前不能预约手术。";
   return "请联系医院确认进度。";
 }
 
@@ -165,7 +177,14 @@ function buildOrderDetail(info) {
     status_desc: statusDesc(st),
     step_index: deriveStepIndex(st),
     timeline_steps: buildTimelineSteps(st),
-    terminated,
+    terminated: terminated && !isQuarantine(st),
+    quarantined: isQuarantine(st),
+    can_book: info.can_book === true,
+    can_restart: info.can_restart === true,
+    restart_pending: info.restart_pending === true,
+    idle_notice: info.idle_notice || "",
+    quarantine_notice: info.quarantine_notice || "",
+    restart_reject_reason: info.restart_reject_reason || "",
     next_action: nextActionText(info),
     reason_text: reasonText,
     contact,
@@ -386,6 +405,14 @@ Page({
       },
       fail: () => this.setData({ myOrdersLoading: false })
     });
+  },
+
+  goRestart(e) {
+    const idx = Number(e.currentTarget.dataset.index || 0);
+    const order = this.data.myOrders[idx] || {};
+    const id = (order.detail && order.detail.info && order.detail.info.id) || order.id || "";
+    if (!id) return;
+    wx.navigateTo({ url: `/pages/reapply/index?id=${id}` });
   },
 
   goBookTNR(e) {

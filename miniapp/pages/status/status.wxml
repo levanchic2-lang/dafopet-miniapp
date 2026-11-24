@@ -48,6 +48,8 @@
       <view class="sub">门店：{{order.clinic_store || '未选'}}</view>
       <view class="sub" wx:if="{{order.health_note_brief}}">流浪状况：{{order.health_note_brief}}</view>
       <view class="sub">更新时间：{{order.updated}}</view>
+      <view wx:if="{{order.idle_notice}}" class="idle-note">{{order.idle_notice}}</view>
+      <view wx:if="{{order.quarantine_notice}}" class="quarantine-note">{{order.quarantine_notice}}</view>
     </view>
 
     <!-- 展开详情 -->
@@ -88,9 +90,15 @@
             <view class="next-v">{{order.detail.view.next_action}}</view>
           </view>
 
+          <view wx:if="{{order.detail.view.idle_notice}}" class="idle-note">{{order.detail.view.idle_notice}}</view>
+          <view wx:if="{{order.detail.view.quarantine_notice}}" class="quarantine-note">{{order.detail.view.quarantine_notice}}</view>
+
           <!-- 去预约按钮 -->
-          <view wx:if="{{order.detail.view.status === 'approved' || order.detail.view.status === 'pre_approved'}}" style="margin-top:16rpx;">
+          <view wx:if="{{order.detail.view.can_book}}" style="margin-top:16rpx;">
             <button class="btn" data-index="{{oidx}}" bindtap="goBookTNR">去预约</button>
+          </view>
+          <view wx:if="{{order.detail.view.can_restart}}" style="margin-top:16rpx;">
+            <button class="btn" data-index="{{oidx}}" bindtap="goRestart">重新申请</button>
           </view>
 
           <!-- 终止原因 -->

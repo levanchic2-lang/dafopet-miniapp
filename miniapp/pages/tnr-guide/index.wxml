@@ -57,6 +57,7 @@
     <view class="notice-item">照片或视频要清晰，请勿重复提交同一只猫。</view>
     <view class="notice-item">审核通过不代表一定可以手术，最终以到院身体评估为准。</view>
     <view class="notice-item">无法按时到院请提前取消，爽约会影响后续申请。</view>
+    <view class="notice-item">自提交之日起 3 个月内仍未完成手术，且没有尚未到来的手术预约，申请会进入隔离区。进入后不能直接预约，需重新提交近照，并经医院审核通过。审核通过后即可预约。</view>
   </view>
 
   <view class="guide-actions">

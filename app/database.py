@@ -2915,6 +2915,52 @@ def _try_sqlite_migrations() -> None:
                 ")"
             ))
 
+            app_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(applications)")).fetchall()}
+            if "submitted_at" not in app_cols:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN submitted_at DATETIME"))
+            if "original_submitted_at" not in app_cols:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN original_submitted_at DATETIME"))
+            if "quarantined_at" not in app_cols:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN quarantined_at DATETIME"))
+            if "status_before_quarantine" not in app_cols:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN status_before_quarantine VARCHAR(40) DEFAULT ''"))
+            if "restart_reject_reason" not in app_cols:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN restart_reject_reason TEXT DEFAULT ''"))
+            if "restart_draft_json" not in app_cols:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN restart_draft_json TEXT DEFAULT ''"))
+            if "restart_count" not in app_cols:
+                conn.execute(text("ALTER TABLE applications ADD COLUMN restart_count INTEGER DEFAULT 0"))
+            # 已提交的旧申请没有单独的提交时刻，用创建时间作为 3 个月的起算点。草稿仍不算提交。
+            conn.execute(text(
+                "UPDATE applications SET submitted_at = created_at "
+                "WHERE submitted_at IS NULL AND status IS NOT NULL AND status != 'draft'"
+            ))
+            conn.execute(text(
+                "UPDATE applications SET original_submitted_at = COALESCE(submitted_at, created_at) "
+                "WHERE original_submitted_at IS NULL AND status IS NOT NULL AND status != 'draft'"
+            ))
+
+            media_cols = {c[1] for c in conn.execute(text("PRAGMA table_info(media_files)")).fetchall()}
+            if "is_current" not in media_cols:
+                conn.execute(text("ALTER TABLE media_files ADD COLUMN is_current BOOLEAN DEFAULT 1"))
+            if "restart_pending" not in media_cols:
+                conn.execute(text("ALTER TABLE media_files ADD COLUMN restart_pending BOOLEAN DEFAULT 0"))
+            if "superseded_at" not in media_cols:
+                conn.execute(text("ALTER TABLE media_files ADD COLUMN superseded_at DATETIME"))
+            conn.execute(text(
+                "CREATE TABLE IF NOT EXISTS application_revisions ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE, "
+                "kind VARCHAR(40) DEFAULT 'quarantine_restart', "
+                "snapshot_json TEXT DEFAULT '', "
+                "created_at DATETIME"
+                ")"
+            ))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_application_revisions_app "
+                "ON application_revisions(application_id)"
+            ))
+
             conn.commit()
     except Exception:
         # 迁移失败不阻塞启动（新库 create_all 已含新列）

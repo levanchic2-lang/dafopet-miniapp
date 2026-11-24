@@ -1,0 +1,23 @@
+<view class="card">
+  <view class="title">重新申请</view>
+  <view class="sub">隔离区里的申请仍保留。请重新上传至少 2 张猫咪现在的近照。旧照片会留下来供医院对照。毛色、体型不用重填，体重到院再量。</view>
+
+  <view wx:if="{{loading}}" class="sub">正在读取原申请…</view>
+  <view wx:if="{{loadError}}" class="err">{{loadError}}</view>
+
+  <view wx:if="{{!loading && !loadError}}">
+    <view class="quarantine-note">{{notice}}</view>
+    <view wx:if="{{rejectReason}}" class="err">上次未通过：{{rejectReason}}</view>
+    <view wx:if="{{catName}}" class="label">{{catName}}</view>
+
+    <view class="label">近照（至少 2 张）</view>
+    <view class="sub">请拍现在的猫咪。旧照片不会被删除。</view>
+    <view class="photos">
+      <image wx:for="{{images}}" wx:key="*this" src="{{item}}" mode="aspectFill" class="photo" />
+    </view>
+    <button class="btn secondary" bindtap="choosePhotos">选择近照</button>
+
+    <view wx:if="{{error}}" class="err">{{error}}</view>
+    <button class="btn" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submit">提交重新申请</button>
+  </view>
+</view>

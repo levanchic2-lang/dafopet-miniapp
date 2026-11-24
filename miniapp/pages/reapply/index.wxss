@@ -1,0 +1,32 @@
+.card { min-height: 100vh; box-sizing: border-box; background: #f7f7f5; margin: 0; padding: 36rpx 28rpx 80rpx; }
+.title { font-size: 40rpx; font-weight: 700; color: #171717; }
+.sub { margin-top: 12rpx; color: #5f5f5b; font-size: 26rpx; line-height: 1.7; }
+.label { margin-top: 28rpx; font-size: 28rpx; font-weight: 700; color: #171717; }
+.input, .picker, .textarea {
+  margin-top: 12rpx;
+  padding: 18rpx 20rpx;
+  background: #fff;
+  border: 1px solid #cbc9c3;
+  font-size: 30rpx;
+  color: #171717;
+}
+.textarea { width: 100%; min-height: 180rpx; box-sizing: border-box; }
+.quarantine-note, .err {
+  margin-top: 20rpx;
+  padding: 18rpx 20rpx;
+  font-size: 26rpx;
+  line-height: 1.7;
+}
+.quarantine-note { background: #f8eded; border-left: 6rpx solid #7a2828; color: #7a2828; }
+.err { background: #f8eded; color: #7a2828; }
+.photos { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 16rpx; }
+.photo { width: 180rpx; height: 180rpx; background: #eee; }
+.btn {
+  margin-top: 24rpx;
+  background: #262626;
+  color: #fafafa;
+  font-weight: 700;
+  border-radius: 4rpx;
+}
+.btn.secondary { background: #fff; color: #171717; border: 1px solid #cbc9c3; }
+.btn::after { border: 0; }

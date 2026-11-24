@@ -14,6 +14,8 @@
  'rejected': '已拒绝',
  'arrived_verified': '已到店',
  'surgery_completed': '手术完成',
+ 'quarantined': '隔离区',
+ 'quarantine_restart_pending': '隔离区·待审核',
  'showcase_hidden': '拒绝公开展示',
  'cat_verified': '已现场确认'
 } %}
@@ -123,12 +125,20 @@
  {% if k == 'pending_ai' or k == 'pending_manual' %}{% set cls = 'pill-warn' %}
  {% elif k == 'pre_approved' or k == 'approved' or k == 'scheduled' %}{% set cls = 'pill-info' %}
  {% elif k == 'surgery_completed' or k == 'arrived_verified' or k == 'cat_verified' %}{% set cls = 'pill-ok' %}
- {% elif k == 'cancelled' or k == 'rejected' or k == 'no_show' %}{% set cls = 'pill-no' %}{% endif %}
+ {% elif k == 'cancelled' or k == 'rejected' or k == 'no_show' or k == 'quarantined' %}{% set cls = 'pill-no' %}
+ {% elif k == 'quarantine_restart_pending' %}{% set cls = 'pill-warn' %}{% endif %}
  <a href="?status={{ k }}{% if filters['q'] %}&q={{ filters['q'] }}{% endif %}{% if filters['origin'] %}&origin={{ filters['origin'] }}{% endif %}{% if filters['media_status'] %}&media_status={{ filters['media_status'] }}{% endif %}{% if filters['store'] %}&store={{ filters['store'] }}{% endif %}{% if filters['from'] %}&from={{ filters['from'] }}{% endif %}{% if filters['to'] %}&to={{ filters['to'] }}{% endif %}"
     class="pill {{ cls }}"
     style="text-decoration:none;cursor:pointer;{% if filters.status == k %}outline:2px solid var(--brand-dark);outline-offset:1px;{% endif %}"
     title="只看「{{ STATUS_ZH.get(k, k) }}」">{{ STATUS_ZH.get(k, k) }} {{ v }}</a>
  {% endfor %}
+ </div>
+ <div style="margin-top:0.7rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">
+  <a href="?status=quarantine_zone{% if filters['q'] %}&q={{ filters['q'] }}{% endif %}{% if filters['origin'] %}&origin={{ filters['origin'] }}{% endif %}{% if filters['store'] %}&store={{ filters['store'] }}{% endif %}"
+     class="pill pill-no" style="text-decoration:none;{% if filters.status == 'quarantine_zone' %}outline:2px solid var(--brand-dark);outline-offset:1px;{% endif %}">隔离区 {{ (stats.overall_by_status.get('quarantined', 0) or 0) + (stats.overall_by_status.get('quarantine_restart_pending', 0) or 0) }}</a>
+  <a href="?status=quarantine_restart_pending{% if filters['q'] %}&q={{ filters['q'] }}{% endif %}{% if filters['origin'] %}&origin={{ filters['origin'] }}{% endif %}{% if filters['store'] %}&store={{ filters['store'] }}{% endif %}"
+     class="pill pill-warn" style="text-decoration:none;{% if filters.status == 'quarantine_restart_pending' %}outline:2px solid var(--brand-dark);outline-offset:1px;{% endif %}">重启待审 {{ stats.overall_by_status.get('quarantine_restart_pending', 0) or 0 }}</a>
+  <span class="sub">满 3 个月仍未完成手术、且没有未到期手术预约的申请会进入隔离区。已约好、尚未到院的手术不会被移入。</span>
  </div>
 </div>
 
@@ -202,6 +212,8 @@
  {% elif s == 'no_show' %}<span class="pill pill-no">爽约</span>
  {% elif s == 'cancelled' %}<span class="pill pill-gray">已取消</span>
  {% elif s == 'rejected' %}<span class="pill pill-no">已拒绝</span>
+ {% elif s == 'quarantined' %}<span class="pill pill-no">隔离区</span>
+ {% elif s == 'quarantine_restart_pending' %}<span class="pill pill-warn">隔离区·待审核</span>
  {% elif s == 'draft' %}<span class="pill pill-gray">草稿</span>
  {% else %}<span class="pill pill-gray">{{ s }}</span>{% endif %}
 {%- endmacro %}
@@ -210,7 +222,8 @@
 {% for a in apps %}
 {% set surg_before_files = a.media | selectattr('kind', 'equalto', 'surgery_before') | list %}
 {% set surg_after_files = a.media | selectattr('kind', 'equalto', 'surgery_after') | list %}
-{% set application_image_files = a.media | selectattr('kind', 'equalto', 'application_image') | list %}
+{% set application_image_files = a.media | selectattr('kind', 'equalto', 'application_image') | selectattr('is_current') | rejectattr('restart_pending') | list %}
+{% set history_image_files = a.media | selectattr('kind', 'equalto', 'application_image') | rejectattr('is_current') | rejectattr('restart_pending') | list %}
 {% set effective_before_n = (surg_before_files | length) if (surg_before_files | length) > 0 else (application_image_files | length) %}
 {% set surgery_media_ok = effective_before_n > 0 and (surg_after_files | length) > 0 %}
 <div class="card" id="app-{{ a.id }}" style="margin-bottom:0;">
@@ -246,6 +259,26 @@
  {% endif %}
  </h2>
  <p class="sub" style="margin:0;">{{ a.address }}</p>
+ {% if a.status == 'quarantined' or a.status == 'quarantine_restart_pending' %}
+ {% set snap = a.latest_restart_snapshot() %}
+ <div style="margin:0.7rem 0 0;padding:0.7rem 0.85rem;border-left:3px solid #6b4423;background:#f8f1e7;font-size:0.88rem;line-height:1.6;">
+  <strong>{% if a.status == 'quarantine_restart_pending' %}隔离区 · 救助人已重新提交{% else %}隔离区 · 不能预约手术{% endif %}</strong>
+  <div class="sub" style="margin:0.25rem 0 0;">
+   首次提交：{{ ((a.original_submitted_at or a.submitted_at or a.created_at) | bjtime).strftime('%Y-%m-%d') if (a.original_submitted_at or a.submitted_at or a.created_at) else '—' }}
+   {% if a.quarantined_at %} · 进入隔离区：{{ (a.quarantined_at | bjtime).strftime('%Y-%m-%d') }}{% endif %}
+   {% if a.status_before_quarantine %} · 进入前：{{ STATUS_ZH.get(a.status_before_quarantine, a.status_before_quarantine) }}{% endif %}
+  </div>
+  <div class="sub" style="margin:0.2rem 0 0;">重新申请只更换近照。毛色、体型沿用原申请，体重到院测量。旧照片保留在下方，供对照。</div>
+  {% if snap %}
+  <div class="sub" style="margin:0.2rem 0 0;">已保留重新申请前的照片。</div>
+  {% endif %}
+  {% if a.status == 'quarantined' and a.restart_reject_reason %}
+  <div class="sub" style="margin:0.2rem 0 0;">上次重新申请未通过：{{ a.restart_reject_reason }}</div>
+  {% endif %}
+ </div>
+ {% elif a.restart_count %}
+ <p class="sub" style="margin:0.45rem 0 0;">该申请曾进入隔离区，重新申请已通过 {{ a.restart_count }} 次，现可预约。历史照片仍保留，可对照。</p>
+ {% endif %}
  <p>
  门店：<strong>{{ a.clinic_store or '未选' }}</strong>
  </p>
@@ -369,13 +402,22 @@
  {% endif %}
 
  <div class="admin-app-thumb-row">
- {% set imgs = a.media | selectattr('kind', 'equalto', 'application_image') | list %}
- {% if imgs %}
- <span class="admin-app-thumb-label">申请素材（点击小图打开原图）：</span>
+ {% if application_image_files %}
+ <span class="admin-app-thumb-label">当前申请素材（点击小图打开原图）：</span>
  <div class="admin-app-thumb-wrap">
- {% for m in imgs %}
+ {% for m in application_image_files %}
  <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="图{{ loop.index }} · 点击查看原图">
  <img src="/file/{{ m.id }}" alt="申请图{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async"/>
+ </a>
+ {% endfor %}
+ </div>
+ {% endif %}
+ {% if history_image_files %}
+ <span class="admin-app-thumb-label" style="display:block;margin-top:0.45rem;">历史申请素材（重新申请前保留，供对照）：</span>
+ <div class="admin-app-thumb-wrap">
+ {% for m in history_image_files %}
+ <a href="/file/{{ m.id }}" target="_blank" rel="noopener noreferrer" class="admin-app-thumb" title="历史图{{ loop.index }}">
+ <img src="/file/{{ m.id }}" alt="历史申请图{{ loop.index }}" loading="lazy" width="76" height="76" decoding="async" style="opacity:0.72;"/>
  </a>
  {% endfor %}
  </div>
@@ -398,7 +440,6 @@
 
  {% set surg_before_files = a.media | selectattr('kind', 'equalto', 'surgery_before') | list %}
  {% set surg_after_files = a.media | selectattr('kind', 'equalto', 'surgery_after') | list %}
- {% set application_image_files = a.media | selectattr('kind', 'equalto', 'application_image') | list %}
  {% set surg_before_n = surg_before_files | length %}
  {% set surg_after_n = surg_after_files | length %}
  {% set effective_before_n = surg_before_n if surg_before_n > 0 else (application_image_files | length) %}
@@ -605,6 +646,23 @@
  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
  <button type="submit" class="danger">删除此草稿</button>
  </form>
+ {% endif %}
+ {% if a.status == 'quarantine_restart_pending' %}
+ <p class="sub" style="margin:0;">救助人已更新近照。通过后申请直接变为已通过，可以预约手术，不必再人工审核一次。不通过则留在隔离区，仍然不能预约。</p>
+ <form method="post" action="/admin/app/{{ a.id }}/quarantine-restart/approve">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <button type="submit">通过重新申请，可以预约</button>
+ </form>
+ <form method="post" action="/admin/app/{{ a.id }}/quarantine-restart/reject">
+ <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+ <div class="admin-form-line">
+ <input type="text" name="reason" placeholder="填写未通过原因" required/>
+ <button type="submit" class="danger">退回隔离区</button>
+ </div>
+ </form>
+ {% endif %}
+ {% if a.status == 'quarantined' %}
+ <p class="sub" style="margin:0;">隔离区申请不能预约手术。请等救助人在小程序更新近照后再审核。</p>
  {% endif %}
  {% if a.status in ['pending_manual', 'pending_ai', 'pre_approved'] %}
  <form method="post" action="/admin/app/{{ a.id }}/manual-approve">

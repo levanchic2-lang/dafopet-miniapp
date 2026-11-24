@@ -557,6 +557,11 @@ def _startup():
         _start_anmon()
     except Exception as _e:
         logger.warning("麻醉监护自动结束调度器启动失败：%s", _e)
+    try:
+        from app.services.tnr_quarantine import start_scheduler as _start_tnr_quarantine
+        _start_tnr_quarantine()
+    except Exception as _e:
+        logger.warning("TNR 隔离区调度器启动失败：%s", _e)
 
 
 @app.on_event("shutdown")
@@ -579,6 +584,11 @@ def _shutdown():
     try:
         from app.services.anesthesia_dispatch import stop_scheduler as _stop_anmon
         _stop_anmon()
+    except Exception:
+        pass
+    try:
+        from app.services.tnr_quarantine import stop_scheduler as _stop_tnr_quarantine
+        _stop_tnr_quarantine()
     except Exception:
         pass
 
@@ -984,6 +994,8 @@ def _require_status_in(row: Application, allowed: set[str], action_label: str) -
             ApplicationStatus.rejected.value: "已拒绝",
             ApplicationStatus.arrived_verified.value: "已到店",
             ApplicationStatus.surgery_completed.value: "手术完成",
+            ApplicationStatus.quarantined.value: "隔离区",
+            ApplicationStatus.quarantine_restart_pending.value: "隔离区·待审核",
         }
         allowed_zh = " / ".join(zh.get(s, s) for s in sorted(allowed))
         current_zh = zh.get(row.status, row.status)
@@ -1037,6 +1049,8 @@ def _ensure_application_images_as_surgery_before(db: Session, application_id: in
         .filter(
             MediaFile.application_id == application_id,
             MediaFile.kind == MediaKind.application_image.value,
+            MediaFile.restart_pending.is_(False),
+            or_(MediaFile.is_current.is_(True), MediaFile.is_current.is_(None)),
         )
         .all()
     )
@@ -2095,6 +2109,17 @@ def _check_duplicate_application_appointment(
     return None
 
 
+def _tnr_booking_block(db: "Session", application_id: int | None) -> str | None:
+    """隔离区申请不能预约；到期且没有未发生手术的申请会在这里被转入隔离区。"""
+    if not application_id:
+        return None
+    from app.services.tnr_quarantine import prepare_for_booking
+    row = db.get(Application, int(application_id))
+    if row is None:
+        return None
+    return prepare_for_booking(db, row)
+
+
 async def _resolve_wechat_openid(payload: dict) -> str:
     """预约写入。有登录码就用登录码；过渡期内也接受旧版只带 openid 的请求。"""
     code = _request_code(payload)
@@ -2400,6 +2425,8 @@ async def api_apply(
         agree_no_pet_fraud=ok_fraud,
         status=ApplicationStatus.pending_ai.value,
     )
+    from app.services.tnr_quarantine import mark_submitted
+    mark_submitted(app_row)
     db.add(app_row)
     db.flush()
 
@@ -2568,6 +2595,7 @@ async def api_apply_create(
         "draft": "草稿", "pending_ai": "审核中", "pending_manual": "待人工审核",
         "pre_approved": "预通过", "approved": "已通过", "scheduled": "已预约",
         "no_show": "爽约", "arrived_verified": "已到店",
+        "quarantined": "隔离区", "quarantine_restart_pending": "隔离区·待审核",
     }
 
     # 1a. 清理同手机号的遗留草稿（网络中断/关闭小程序导致未完成的提交）
@@ -2587,6 +2615,7 @@ async def api_apply_create(
         ApplicationStatus.pending_ai.value,
         ApplicationStatus.pending_manual.value,
         ApplicationStatus.pre_approved.value,
+        ApplicationStatus.quarantine_restart_pending.value,
     ]
     pending_dup = (
         db.query(Application)
@@ -2619,6 +2648,15 @@ async def api_apply_create(
     )
     if same_cat_dup:
         status_label = _DUP_STATUS_ZH.get(same_cat_dup.status, same_cat_dup.status)
+        if same_cat_dup.status in (
+            ApplicationStatus.quarantined.value,
+            ApplicationStatus.quarantine_restart_pending.value,
+        ):
+            raise HTTPException(
+                409,
+                f"「{f['cat_nickname']}」的申请已进入隔离区（编号 #{same_cat_dup.id}，当前状态：{status_label}）。"
+                f"请在原申请上点「重新申请」，更新近照后等待医院审核，不要另开一份新申请。",
+            )
         raise HTTPException(
             409,
             f"「{f['cat_nickname']}」已有进行中的申请（编号 #{same_cat_dup.id}，当前状态：{status_label}），"
@@ -2796,6 +2834,8 @@ async def api_apply_finalize(app_id: int, request: Request, db: Session = Depend
         raise HTTPException(400, _TNR_IMAGE_REQUIREMENT_MESSAGE)
 
     row.status = ApplicationStatus.pending_ai.value
+    from app.services.tnr_quarantine import mark_submitted
+    mark_submitted(row)
     db.commit()
 
     ai_result = await review_application_media(image_paths, video_paths)
@@ -2853,6 +2893,7 @@ async def api_apply_finalize(app_id: int, request: Request, db: Session = Depend
         "pre_approved": "预通过（待复核）", "approved": "已通过", "scheduled": "已预约",
         "arrived_verified": "已到店", "surgery_completed": "手术已完成",
         "rejected": "未通过", "cancelled": "已取消", "no_show": "爽约",
+        "quarantined": "隔离区", "quarantine_restart_pending": "隔离区·待审核",
     }
     return {
         "id": row.id,
@@ -2904,6 +2945,9 @@ async def api_app_status(
         else:
             _legacy_update_required("请更新小程序后查看申请进度。")
 
+    from app.services.tnr_quarantine import public_flags, touch_rows
+    touch_rows(db, [row])
+
     def mask_phone(s: str) -> str:
         t = (s or "").strip()
         if len(t) < 7:
@@ -2931,6 +2975,7 @@ async def api_app_status(
         "reject_reason": notes,
         "created_at": (row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.created_at else "",
         "updated_at": (row.updated_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.updated_at else "",
+        **public_flags(row),
         "notifications": [
             {
                 "channel": n.channel,
@@ -2942,12 +2987,114 @@ async def api_app_status(
     }
 
 
+def _require_customer_application(request: Request, db: Session, row: Application, code: str) -> None:
+    if _lookup_privileged(request, db):
+        return
+    if not (code or "").strip():
+        raise HTTPException(401, "请先完成微信登录")
+    openid = _wechat_openid_from_code(code)
+    if not _application_visible_to_openid(db, row, openid):
+        raise HTTPException(403, "只能操作已绑定到当前微信的申请")
+
+
+@app.post("/api/app/{app_id}/restart/begin")
+async def api_restart_begin(
+    app_id: int,
+    request: Request,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    row = db.get(Application, app_id)
+    if not row:
+        raise HTTPException(404, "申请不存在")
+    _require_customer_application(request, db, row, _request_code(payload))
+    from app.services.tnr_quarantine import QuarantineError, begin_restart
+    try:
+        begin_restart(db, row, payload or {})
+    except QuarantineError as exc:
+        raise HTTPException(400, str(exc))
+    return {"ok": True, "id": row.id}
+
+
+@app.post("/api/app/{app_id}/restart/media")
+async def api_restart_media(
+    app_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    code: str = Form(""),
+    kind: str = Form("image"),
+    file: UploadFile = File(...),
+):
+    row = db.get(Application, app_id)
+    if not row:
+        raise HTTPException(404, "申请不存在")
+    _require_customer_application(request, db, row, code)
+    from app.services.tnr_quarantine import QuarantineError, assert_restart_upload
+    try:
+        assert_restart_upload(row)
+    except QuarantineError as exc:
+        raise HTTPException(400, str(exc))
+    base = Path(settings.upload_dir) / str(app_id)
+    base.mkdir(parents=True, exist_ok=True)
+    if kind == "video":
+        ext = _video_ext(file.filename or "")
+        dest = base / f"restart_vid_{secrets.token_hex(6)}{ext}"
+        media_kind = MediaKind.application_video.value
+    else:
+        ext = _image_ext(file.filename or "")
+        dest = base / f"restart_img_{secrets.token_hex(6)}{ext}"
+        media_kind = MediaKind.application_image.value
+    dest.write_bytes(await file.read())
+    media = MediaFile(
+        application_id=app_id,
+        kind=media_kind,
+        stored_path=str(dest),
+        original_name=file.filename or "",
+        is_current=False,
+        restart_pending=True,
+    )
+    db.add(media)
+    db.commit()
+    db.refresh(media)
+    return {"ok": True, "media_id": media.id}
+
+
+@app.post("/api/app/{app_id}/restart/finalize")
+async def api_restart_finalize(
+    app_id: int,
+    request: Request,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    row = db.get(Application, app_id)
+    if not row:
+        raise HTTPException(404, "申请不存在")
+    _require_customer_application(request, db, row, _request_code(payload))
+    from app.services.tnr_quarantine import QuarantineError, finalize_restart
+    try:
+        finalize_restart(db, row)
+    except QuarantineError as exc:
+        raise HTTPException(400, str(exc))
+    return {
+        "ok": True,
+        "id": row.id,
+        "status": row.status,
+        "status_zh": "隔离区·待审核",
+        "message": "重新申请已提交，请等待医院审核。审核通过后即可预约，通过前不能预约手术。",
+    }
+
+
 @app.get("/admin", response_class=HTMLResponse)
 async def page_admin(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return templates.TemplateResponse(request, "uk/login.html",
             {"request": request, "title": "医院后台登录", "csrf_token": _get_csrf_token(request)},
         )
+    try:
+        from app.services.tnr_quarantine import scan_idle_applications
+        scan_idle_applications(db)
+    except Exception:
+        logger.exception("TNR 隔离区扫描失败")
     qp = request.query_params
     status = (qp.get("status") or "").strip()
     store = (qp.get("store") or "").strip()
@@ -2980,6 +3127,11 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
     elif status == "cat_verified":
         # 虚拟筛选：已现场确认（员工核对过"到的就是这只猫"）
         base_q = base_q.filter(Application.staff_cat_verified.is_(True))
+    elif status == "quarantine_zone":
+        base_q = base_q.filter(Application.status.in_([
+            ApplicationStatus.quarantined.value,
+            ApplicationStatus.quarantine_restart_pending.value,
+        ]))
     elif status:
         base_q = base_q.filter(Application.status == status)
     if store:
@@ -3078,7 +3230,11 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
     today0 = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     today_new = _stat_q.filter(Application.created_at >= today0).with_entities(func.count(Application.id)).scalar() or 0
     pending_todo = (
-        _stat_q.filter(Application.status.in_([ApplicationStatus.pending_manual.value, ApplicationStatus.pre_approved.value]))
+        _stat_q.filter(Application.status.in_([
+            ApplicationStatus.pending_manual.value,
+            ApplicationStatus.pre_approved.value,
+            ApplicationStatus.quarantine_restart_pending.value,
+        ]))
         .with_entities(func.count(Application.id))
         .scalar()
         or 0
@@ -3109,7 +3265,7 @@ async def page_admin(request: Request, db: Session = Depends(get_db)):
     total = base_q.count()
 
     rows = (
-        base_q.options(selectinload(Application.media))
+        base_q.options(selectinload(Application.media), selectinload(Application.revisions))
         .order_by(Application.created_at.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
@@ -6514,6 +6670,9 @@ async def admin_appointment_create(
             exists = db.query(Application.id).filter(Application.id == related_id).scalar()
             if not exists:
                 raise HTTPException(404, "关联的 TNR 申请不存在。")
+            block = _tnr_booking_block(db, related_id)
+            if block:
+                raise HTTPException(400, block)
         # TNR 规则校验（管理员创建不检查爽约封禁）
         tnr_err = _check_tnr_constraints(
             db,
@@ -7077,6 +7236,9 @@ async def admin_appointment_reschedule(
             return _admin_appointment_redirect(next, err="无权操作其他门店的预约", anchor=_anchor)
     if row.status in (AppointmentStatus.cancelled.value, AppointmentStatus.completed.value, AppointmentStatus.no_show.value):
         return _admin_appointment_redirect(next, err="当前状态不允许改约", anchor=_anchor)
+    block = _tnr_booking_block(db, row.related_application_id)
+    if block:
+        return _admin_appointment_redirect(next, err=block, anchor=_anchor)
 
     new_date = (new_date or "").strip()
     new_time = (new_time or "").strip()
@@ -7223,6 +7385,53 @@ async def manual_approve(app_id: int, request: Request, db: Session = Depends(ge
     )
     if next_url:
         return RedirectResponse(_safe_next(next_url, "/admin"), status_code=303)
+    return _admin_back(request, app_id)
+
+
+@app.post("/admin/app/{app_id}/quarantine-restart/approve")
+async def admin_quarantine_restart_approve(
+    app_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    csrf_token: str = Form(""),
+    next_url: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    row = db.get(Application, app_id)
+    if not row:
+        raise HTTPException(404)
+    from app.services.tnr_quarantine import QuarantineError, approve_restart
+    try:
+        approve_restart(db, row, request.session.get("admin_username") or "admin")
+    except QuarantineError as exc:
+        raise HTTPException(400, str(exc))
+    if next_url:
+        return RedirectResponse(_safe_next(next_url, "/admin?status=quarantine_restart_pending"), status_code=303)
+    return _admin_back(request, app_id)
+
+
+@app.post("/admin/app/{app_id}/quarantine-restart/reject")
+async def admin_quarantine_restart_reject(
+    app_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    reason: str = Form(""),
+    csrf_token: str = Form(""),
+    next_url: str = Form(""),
+):
+    require_admin(request)
+    _require_csrf(request, csrf_token)
+    row = db.get(Application, app_id)
+    if not row:
+        raise HTTPException(404)
+    from app.services.tnr_quarantine import QuarantineError, reject_restart
+    try:
+        reject_restart(db, row, reason, request.session.get("admin_username") or "admin")
+    except QuarantineError as exc:
+        raise HTTPException(400, str(exc))
+    if next_url:
+        return RedirectResponse(_safe_next(next_url, "/admin?status=quarantine_zone"), status_code=303)
     return _admin_back(request, app_id)
 
 
@@ -10537,6 +10746,9 @@ async def api_staff_miniapp_appointment_create(
         matched = matched or (candidates[0] if len(candidates) == 1 else None)
         if not matched:
             raise HTTPException(400, "未找到该宠物已通过审核的TNR申请，请先从今日TNR进入")
+        block = _tnr_booking_block(db, matched.id)
+        if block:
+            raise HTTPException(400, block)
         related_id = matched.id
     checks = [
         _check_tnr_constraints(db, category=fields["category"], store=fields["store"],
@@ -11263,6 +11475,9 @@ async def api_appointments_create(payload: dict = Body(...), db: Session = Depen
             raise HTTPException(404, "关联的 TNR 申请不存在。")
         if (app_row.wechat_openid or "") != openid:
             raise HTTPException(403, "该TNR申请不属于当前微信账号。")
+        block = _tnr_booking_block(db, app_row.id)
+        if block:
+            raise HTTPException(400, block)
         if app_row.status not in (
             ApplicationStatus.approved.value,
             ApplicationStatus.pre_approved.value,
@@ -11445,6 +11660,8 @@ async def api_wechat_my_apps(
         .limit(50)
         .all()
     )
+    from app.services.tnr_quarantine import public_flags, touch_rows
+    touch_rows(db, rows)
     items = []
     for row in rows:
         notes = (row.reject_reason or "").strip()
@@ -11467,6 +11684,7 @@ async def api_wechat_my_apps(
                 "health_note_brief": hn,
                 "created_at": (row.created_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.created_at else "",
                 "updated_at": (row.updated_at + timedelta(hours=8)).strftime("%Y-%m-%d %H:%M") if row.updated_at else "",
+                **public_flags(row),
             }
         )
     return {"openid": openid, "items": items}
@@ -11574,6 +11792,9 @@ async def api_wechat_appointment_update(
         raise HTTPException(403, "无权操作此预约")
     if row.status != AppointmentStatus.pending.value:
         raise HTTPException(400, "只有「待确认」状态的预约才能修改，如需调整请联系医院")
+    block = _tnr_booking_block(db, row.related_application_id)
+    if block:
+        raise HTTPException(400, block)
 
     new_date  = str(payload.get("appointment_date", "") or row.appointment_date).strip()
     new_time  = str(payload.get("appointment_time", "") or row.appointment_time).strip()
@@ -43144,6 +43365,9 @@ async def m_appointment_edit_save(
     if a.status in (AppointmentStatus.cancelled.value, AppointmentStatus.completed.value,
                     AppointmentStatus.no_show.value):
         return _bad("当前状态不允许修改")
+    block = _tnr_booking_block(db, a.related_application_id)
+    if block:
+        return _bad(block)
 
     new_date = (new_date or "").strip()
     new_time = (new_time or "").strip()
@@ -43538,24 +43762,37 @@ async def m_exam_detail(order_id: int, request: Request, db: Session = Depends(g
 async def m_tnr_list(request: Request, db: Session = Depends(get_db)):
     if not _admin_ok(request):
         return RedirectResponse("/admin/login?next=/m/tnr", status_code=303)
+    try:
+        from app.services.tnr_quarantine import scan_idle_applications
+        scan_idle_applications(db)
+    except Exception:
+        logger.exception("TNR 隔离区扫描失败")
     store_short = _get_op_store(request)
     store_full = _STORE_SHORT_TO_FULL.get(store_short, "") if store_short else ""
-    q = db.query(Application).filter(
-        Application.status.in_([
-            ApplicationStatus.pending_manual.value,
-            ApplicationStatus.pre_approved.value,
-        ])
-    )
-    if store_short:
-        q = q.filter(or_(
+
+    def _store_filter(query):
+        if not store_short:
+            return query
+        return query.filter(or_(
             Application.clinic_store == store_full,
             Application.clinic_store == store_short,
         ))
-    rows = q.order_by(Application.created_at.desc()).limit(50).all()
+
+    rows = _store_filter(db.query(Application).filter(
+        Application.status.in_([
+            ApplicationStatus.pending_manual.value,
+            ApplicationStatus.pre_approved.value,
+            ApplicationStatus.quarantine_restart_pending.value,
+        ])
+    )).order_by(Application.created_at.desc()).limit(50).all()
+    quarantined_rows = _store_filter(db.query(Application).filter(
+        Application.status == ApplicationStatus.quarantined.value,
+    )).order_by(Application.quarantined_at.desc(), Application.id.desc()).limit(50).all()
     from app.services.wechat_subscribe import annotate_notify_flags
-    annotate_notify_flags(db, rows)
+    annotate_notify_flags(db, rows + quarantined_rows)
     ctx = _m_ctx(request, db, active_tab="tnr")
     ctx["rows"] = rows
+    ctx["quarantined_rows"] = quarantined_rows
     return templates.TemplateResponse(request, "m_uk/tnr_list.html", ctx)
 
 
@@ -43566,13 +43803,30 @@ async def m_tnr_detail(app_id: int, request: Request, db: Session = Depends(get_
     row = db.get(Application, app_id)
     if not row:
         raise HTTPException(404)
-    # 照片
-    images = [m for m in row.media if m.kind == MediaKind.application_image.value]
-    videos = [m for m in row.media if m.kind == MediaKind.application_video.value]
+    def _current_media(kind: str) -> list:
+        return [
+            m for m in row.media
+            if m.kind == kind and not m.restart_pending and m.is_current is not False
+        ]
+
+    def _history_media(kind: str) -> list:
+        return [
+            m for m in row.media
+            if m.kind == kind and not m.restart_pending and m.is_current is False
+        ]
+
+    images = _current_media(MediaKind.application_image.value)
+    videos = _current_media(MediaKind.application_video.value)
+    history_images = _history_media(MediaKind.application_image.value)
     from app.services.wechat_subscribe import annotate_notify_flags
     annotate_notify_flags(db, [row])
     ctx = _m_ctx(request, db, active_tab="tnr")
-    ctx.update({"row": row, "images": images, "videos": videos})
+    ctx.update({
+        "row": row,
+        "images": images,
+        "videos": videos,
+        "history_images": history_images,
+    })
     return templates.TemplateResponse(request, "m_uk/tnr_detail.html", ctx)
 
 
