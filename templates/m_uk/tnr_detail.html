@@ -14,6 +14,8 @@
     {% elif row.status == 'pre_approved' %}<span class="ukm-pill" style="margin-left:6px;vertical-align:middle;">预通过</span>
     {% elif row.status == 'approved' %}<span class="ukm-pill green" style="margin-left:6px;vertical-align:middle;">已通过</span>
     {% elif row.status == 'rejected' %}<span class="ukm-pill red" style="margin-left:6px;vertical-align:middle;">已拒绝</span>
+    {% elif row.status == 'quarantined' %}<span class="ukm-pill red" style="margin-left:6px;vertical-align:middle;">隔&nbsp;离&nbsp;区</span>
+    {% elif row.status == 'quarantine_restart_pending' %}<span class="ukm-pill amber" style="margin-left:6px;vertical-align:middle;">重&nbsp;启&nbsp;待&nbsp;审</span>
     {% else %}<span class="ukm-pill" style="margin-left:6px;vertical-align:middle;">{{ row.status }}</span>{% endif %}
   </h1>
   <div class="meta">
@@ -46,6 +48,25 @@
 </div>
 {% endif %}
 
+{% if row.status == 'quarantined' or row.status == 'quarantine_restart_pending' %}
+<div class="ukm-card-group">
+  <div class="ukm-card" style="border-left:2px solid var(--accent-amber);">
+    <div class="ukm-card-title" style="color:var(--accent-amber);">隔&nbsp;离&nbsp;区</div>
+    <div class="ukm-card-sub">
+      {% if row.status == 'quarantine_restart_pending' %}救助人已更新近照和资料，等待审核。通过后回到待人工审核，再按正常流程复核；不通过则留在隔离区，不能预约。
+      {% else %}提交已满 3 个月且手术未完成。救助人仍可查看，但不能预约。请等其重新提交近照、体型和毛色后再审。{% endif %}
+    </div>
+    {% if row.restart_reject_reason and row.status == 'quarantined' %}
+    <div class="ukm-card-sub">上次未通过：{{ row.restart_reject_reason }}</div>
+    {% endif %}
+    {% set snap = row.latest_restart_snapshot() %}
+    {% if snap %}
+    <div class="ukm-card-sub">重新申请前：毛色 {{ snap.get('cat_color') or '—' }} · 体型/体重 {{ snap.get('weight_estimate') or '—' }}</div>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
 {# 照片 #}
 {% if images %}
 <div class="ukm-section-head"><h2>申&nbsp;请&nbsp;照&nbsp;片&nbsp;&nbsp;·&nbsp;{{ images|length }}</h2></div>
@@ -55,6 +76,22 @@
       {% for m in images %}
       <div onclick="ukmLightbox('/file/{{ m.id }}')" style="aspect-ratio:1;background:var(--bg-elevated);overflow:hidden;border:0.5px solid var(--hair);cursor:pointer;">
         <img src="/file/{{ m.id }}" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if history_images %}
+<div class="ukm-section-head"><h2>历&nbsp;史&nbsp;照&nbsp;片&nbsp;&nbsp;·&nbsp;{{ history_images|length }}</h2></div>
+<div class="ukm-card-group">
+  <div class="ukm-card">
+    <div class="ukm-card-sub" style="margin-bottom:8px;">重新申请前的照片保留作对照，不作为当前资料。</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+      {% for m in history_images %}
+      <div onclick="ukmLightbox('/file/{{ m.id }}')" style="aspect-ratio:1;background:var(--bg-elevated);overflow:hidden;border:0.5px solid var(--hair);cursor:pointer;">
+        <img src="/file/{{ m.id }}" style="width:100%;height:100%;object-fit:cover;display:block;opacity:0.72;"/>
       </div>
       {% endfor %}
     </div>
@@ -126,7 +163,29 @@
 </div>
 
 {# 审核动作 #}
-{% if row.status in ['pending_manual', 'pre_approved'] %}
+{% if row.status == 'quarantine_restart_pending' %}
+<form method="post" action="/admin/app/{{ row.id }}/quarantine-restart/approve" style="margin-top:14px;"
+      onsubmit="return confirm('通过后回到待人工审核，仍需再复核一次才能预约。确认通过这份重新申请？')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="next_url" value="/m/tnr"/>
+  <button type="submit" class="ukm-btn block">通&nbsp;过&nbsp;重&nbsp;新&nbsp;申&nbsp;请</button>
+</form>
+<form method="post" action="/admin/app/{{ row.id }}/quarantine-restart/reject" style="margin-top:8px;"
+      onsubmit="return rejectRestart(this)">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>
+  <input type="hidden" name="next_url" value="/m/tnr"/>
+  <input type="hidden" name="reason" id="restart-reason" value=""/>
+  <button type="submit" class="ukm-btn hair block" style="color:var(--accent-red);border-color:var(--accent-red);">退&nbsp;回&nbsp;隔&nbsp;离&nbsp;区</button>
+</form>
+<script>
+function rejectRestart(form) {
+  const r = prompt('未通过原因（必填，救助人可在申请里看到）：');
+  if (!r || !r.trim()) return false;
+  form.querySelector('#restart-reason').value = r.trim();
+  return true;
+}
+</script>
+{% elif row.status in ['pending_manual', 'pre_approved'] %}
 <form method="post" action="/admin/app/{{ row.id }}/manual-approve" style="margin-top:14px;"
       onsubmit="return confirm('确认通过这份 TNR 申请？')">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}"/>

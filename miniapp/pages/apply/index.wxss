@@ -1,5 +1,15 @@
 .label { margin-top: 22rpx; font-size: 28rpx; font-weight: 700; }
 
+.idle-note {
+  margin-top: 20rpx;
+  padding: 20rpx;
+  background: #f8f1e7;
+  border-left: 6rpx solid #6b4423;
+  color: #6b4423;
+  font-size: 25rpx;
+  line-height: 1.7;
+}
+
 .preflight-card {
   margin-top: 24rpx;
   padding: 24rpx;

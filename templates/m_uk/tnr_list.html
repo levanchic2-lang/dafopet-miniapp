@@ -1,18 +1,19 @@
 {% extends "m_uk/_base.html" %}
 {% block title %}TNR 待审{% endblock %}
-{% block topbar_title %}T&nbsp;N&nbsp;R&nbsp;待&nbsp;审{% endblock %}
+{% block topbar_title %}T&nbsp;N&nbsp;R&nbsp;审&nbsp;核{% endblock %}
 {% block topbar_back %}<a href="/m/medical" class="ukm-topbar-back">‹</a>{% endblock %}
 
 {% block content %}
 
-{% if not rows %}
+{% if not rows and not quarantined_rows %}
 <div class="ukm-empty">
   <div class="big">无&nbsp;待&nbsp;审&nbsp;申&nbsp;请</div>
-  所有 TNR 申请都已处理
+  待审、隔离区重启和隔离区都已看过
 </div>
 
 {% else %}
-<div class="ukm-section-head"><h2>共&nbsp;&nbsp;{{ rows|length }}&nbsp;&nbsp;份</h2></div>
+{% if rows %}
+<div class="ukm-section-head"><h2>待&nbsp;审&nbsp;与&nbsp;重&nbsp;启&nbsp;&nbsp;·&nbsp;{{ rows|length }}</h2></div>
 <div class="ukm-row-group">
   {% for a in rows %}
   <a class="ukm-row" href="/m/tnr/{{ a.id }}">
@@ -45,11 +46,31 @@
     </div>
     {% if a.status == 'pending_manual' %}<span class="ukm-pill amber">待&nbsp;审</span>
     {% elif a.status == 'pre_approved' %}<span class="ukm-pill">预通过</span>
+    {% elif a.status == 'quarantine_restart_pending' %}<span class="ukm-pill amber">重&nbsp;启&nbsp;待&nbsp;审</span>
     {% endif %}
     <span class="ukm-row-arrow">›</span>
   </a>
   {% endfor %}
 </div>
+{% endif %}
+
+{% if quarantined_rows %}
+<div class="ukm-section-head"><h2>隔&nbsp;离&nbsp;区&nbsp;&nbsp;·&nbsp;{{ quarantined_rows|length }}</h2></div>
+<div class="ukm-fineprint" style="margin:0 16px 8px;">满 3 个月未完成手术，且没有未到期的手术预约。救助人可以看见，但不能预约，需重新提交资料后由医院审核。</div>
+<div class="ukm-row-group">
+  {% for a in quarantined_rows %}
+  <a class="ukm-row" href="/m/tnr/{{ a.id }}">
+    <div class="ukm-row-body">
+      <div class="ukm-row-title">{{ a.cat_nickname or '未命名' }}</div>
+      <div class="ukm-row-sub">#{{ a.id }}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ a.applicant_name or '—' }}{% if a.phone %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ a.phone }}{% endif %}</div>
+      <div class="ukm-row-sub">进入隔离区 {{ (a.quarantined_at | bjtime).strftime('%m-%d') if a.quarantined_at else '—' }}{% if a.cat_color %}<span style="margin:0 5px;color:var(--ink-4);">·</span>{{ a.cat_color }}{% endif %}</div>
+    </div>
+    <span class="ukm-pill red">隔&nbsp;离&nbsp;区</span>
+    <span class="ukm-row-arrow">›</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
 {% endif %}
 
 {% endblock %}

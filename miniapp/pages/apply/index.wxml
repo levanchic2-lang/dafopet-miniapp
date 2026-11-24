@@ -12,6 +12,8 @@
     <button class="btn secondary" style="margin-top:12rpx;" bindtap="onReauthNotify">{{notifyOpenSettings ? '去设置打开通知' : '一键重新授权'}}</button>
   </view>
 
+  <view class="idle-note">若自申请提交之日起 3 个月内仍未完成手术，该申请将进入隔离区。进入隔离区后不能直接预约；如需继续，须重新提交猫咪近照和最新资料（毛色、体型等可能已变化），并经医院审核通过。</view>
+
   <view class="preflight-card">
     <view class="preflight-title">申请前请准备</view>
     <view class="preflight-item">1. 申请人姓名、手机号和身份证号</view>

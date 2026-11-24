@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import enum
+import json
 from datetime import datetime
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from typing import Optional
@@ -21,6 +22,10 @@ class ApplicationStatus(str, enum.Enum):
     rejected = "rejected"
     arrived_verified = "arrived_verified"
     surgery_completed = "surgery_completed"
+    # 提交满 3 个月仍未完成手术，且没有未到期的手术预约。
+    quarantined = "quarantined"
+    # 救助人已更新资料重新申请，等待员工人工放行。
+    quarantine_restart_pending = "quarantine_restart_pending"
 
 
 class AppointmentCategory(str, enum.Enum):
@@ -101,12 +106,37 @@ class Application(Base):
     customer_id = mapped_column(ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, default=None)
     pet_id      = mapped_column(ForeignKey("pets.id",      ondelete="SET NULL"), nullable=True, default=None)
 
+    # 3 个月隔离从提交时刻起算。重新申请通过后 submitted_at 重置，original_submitted_at 保留首次提交。
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+    original_submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+    quarantined_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
+    status_before_quarantine: Mapped[str] = mapped_column(String(40), default="")
+    restart_reject_reason: Mapped[str] = mapped_column(Text, default="")
+    restart_draft_json: Mapped[str] = mapped_column(Text, default="")
+    restart_count: Mapped[int] = mapped_column(Integer, default=0)
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     media = relationship("MediaFile", back_populates="application", cascade="all, delete-orphan")
     notifications = relationship("NotificationLog", back_populates="application", cascade="all, delete-orphan")
     appointments = relationship("Appointment", back_populates="application")
+    revisions = relationship(
+        "ApplicationRevision",
+        back_populates="application",
+        cascade="all, delete-orphan",
+        order_by="ApplicationRevision.id.asc()",
+    )
+
+    def latest_restart_snapshot(self) -> dict:
+        rows = list(self.revisions or [])
+        if not rows:
+            return {}
+        try:
+            data = json.loads(rows[-1].snapshot_json or "{}")
+        except (TypeError, ValueError):
+            return {}
+        return data if isinstance(data, dict) else {}
 
 
 class Appointment(Base):
@@ -158,9 +188,27 @@ class MediaFile(Base):
     kind: Mapped[str] = mapped_column(String(40))
     stored_path: Mapped[str] = mapped_column(String(512))
     original_name: Mapped[str] = mapped_column(String(255), default="")
+    # 重新申请后，旧照片保留但不作为当前资料。
+    is_current: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    restart_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    superseded_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     application = relationship("Application", back_populates="media")
+
+
+class ApplicationRevision(Base):
+    """重新申请前的字段与照片快照。只追加，不覆盖历史。"""
+
+    __tablename__ = "application_revisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    application_id: Mapped[int] = mapped_column(ForeignKey("applications.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(40), default="quarantine_restart")
+    snapshot_json: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    application = relationship("Application", back_populates="revisions")
 
 
 class NotificationLog(Base):

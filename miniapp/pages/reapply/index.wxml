@@ -1,0 +1,47 @@
+<view class="card">
+  <view class="title">重新申请</view>
+  <view class="sub">隔离区里的申请仍保留。请按猫咪现在的样子更新资料，并重新上传至少 2 张近照。旧照片会留下来供医院对照。</view>
+
+  <view wx:if="{{loading}}" class="sub">正在读取原申请…</view>
+  <view wx:if="{{loadError}}" class="err">{{loadError}}</view>
+
+  <view wx:if="{{!loading && !loadError}}">
+    <view class="quarantine-note">{{notice}}</view>
+    <view wx:if="{{rejectReason}}" class="err">上次未通过：{{rejectReason}}</view>
+
+    <view class="label">流浪猫名字</view>
+    <input class="input" value="{{form.cat_nickname}}" data-k="cat_nickname" bindinput="onInput" />
+
+    <view class="label">性别</view>
+    <picker class="picker" mode="selector" range="{{genderOptions}}" range-key="label" value="{{genderIndex}}" bindchange="onGender">
+      <view>{{genderOptions[genderIndex].label}}</view>
+    </picker>
+
+    <view class="label">毛色</view>
+    <input class="input" value="{{form.cat_color}}" data-k="cat_color" placeholder="如：黑白 / 三花 / 奶牛" bindinput="onInput" />
+
+    <view class="label">体型 / 体重</view>
+    <input class="input" value="{{form.weight_estimate}}" data-k="weight_estimate" placeholder="如：偏瘦 / 约 4 公斤" bindinput="onInput" />
+
+    <view class="label">品种（可选）</view>
+    <input class="input" value="{{form.cat_breed}}" data-k="cat_breed" placeholder="如：田园猫" bindinput="onInput" />
+
+    <view class="label">出生年月（可选）</view>
+    <picker mode="date" fields="month" value="{{form.age_estimate}}" bindchange="onAge">
+      <view class="picker">{{form.age_estimate || '选择年月'}}</view>
+    </picker>
+
+    <view class="label">健康与外观说明</view>
+    <textarea class="textarea" value="{{form.health_note}}" data-k="health_note" maxlength="2000" bindinput="onInput" />
+
+    <view class="label">近照（至少 2 张）</view>
+    <view class="sub">请拍现在的猫咪。旧照片不会被删除。</view>
+    <view class="photos">
+      <image wx:for="{{images}}" wx:key="*this" src="{{item}}" mode="aspectFill" class="photo" />
+    </view>
+    <button class="btn secondary" bindtap="choosePhotos">选择近照</button>
+
+    <view wx:if="{{error}}" class="err">{{error}}</view>
+    <button class="btn" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submit">提交重新申请</button>
+  </view>
+</view>
