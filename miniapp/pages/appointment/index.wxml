@@ -1,4 +1,4 @@
-<view class="card">
+<view class="card{{arrivalNoticeVisible ? ' arrival-open' : ''}}">
   <view wx:if="{{editMode}}" style="margin-bottom:16rpx;padding:20rpx 24rpx;background:#faf4e8;border:1rpx solid #d8d4cc;border-radius:4rpx;">
     <view style="font-size:28rpx;font-weight:700;color:#6b4423;">修改预约 #{{editApptId}}</view>
     <view style="font-size:24rpx;color:#6b4423;margin-top:6rpx;line-height:1.6;">预约板块与项目不可更改。如需更换项目，请取消后重新预约。手机号需重新填写。</view>
@@ -257,6 +257,14 @@
     </block>
     </block>
 
-    <button class="btn" loading="{{submitting}}" disabled="{{submitting}}" bindtap="onSubmit">{{editMode ? '保存修改' : '提交预约'}}</button>
+    <button class="btn" loading="{{submitting}}" disabled="{{submitting || arrivalNoticeVisible}}" bindtap="onSubmit">{{editMode ? '保存修改' : '提交预约'}}</button>
   </block>
+
+  <view wx:if="{{arrivalNoticeVisible}}" class="arrival-mask" catchtouchmove="preventArrivalScroll">
+    <view class="arrival-card">
+      <view class="arrival-title">温馨提示</view>
+      <view class="arrival-body">预约时间不是手术开始时间，也不是准时接待时间。到院后请按当天门诊顺序排队；若前面就诊有延误，开始时间会顺延，希望您理解。</view>
+      <button class="arrival-btn" hover-class="arrival-btn-hover" bindtap="onArrivalNoticeConfirm">我知道了</button>
+    </view>
+  </view>
 </view>

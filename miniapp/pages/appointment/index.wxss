@@ -289,3 +289,71 @@
   font-size: 26rpx;
   font-weight: 700;
 }
+
+.card.arrival-open input,
+.card.arrival-open textarea,
+.card.arrival-open picker,
+.card.arrival-open checkbox {
+  display: none;
+}
+
+.arrival-mask {
+  position: fixed;
+  z-index: 1000;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx;
+  box-sizing: border-box;
+  background: rgba(23, 23, 23, 0.72);
+}
+
+.arrival-card {
+  width: 100%;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 2rpx solid #171717;
+  border-top: 12rpx solid #6b4423;
+  border-radius: 4rpx;
+  padding: 40rpx 40rpx 36rpx;
+}
+
+.arrival-title {
+  font-size: 40rpx;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+  color: #171717;
+}
+
+.arrival-body {
+  margin-top: 28rpx;
+  font-size: 32rpx;
+  line-height: 1.75;
+  color: #171717;
+}
+
+.arrival-btn {
+  margin: 40rpx 0 0;
+  padding: 0;
+  width: 100%;
+  height: 96rpx;
+  line-height: 96rpx;
+  border-radius: 4rpx;
+  background: #171717;
+  color: #ffffff;
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.arrival-btn::after {
+  border: 0;
+}
+
+.arrival-btn-hover {
+  background: #000000;
+}
