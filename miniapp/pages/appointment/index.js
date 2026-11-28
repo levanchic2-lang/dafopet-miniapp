@@ -167,6 +167,7 @@ Page({
     beautyDisclaimer: "以上占用时间为估算时间。如动物不配合或毛量超出预估，实际服务时长可能有所浮动，具体以门店实际执行时间为准。",
     editMode: false,
     editApptId: 0,
+    arrivalNoticeVisible: false,
     // TNR 已通过申请列表（用于自动/手动关联）
     tnrApps: [],
     tnrAppIndex: 0,
@@ -883,8 +884,33 @@ Page({
     if (this.data.isBeauty) this.scheduleBeautySlots();
   },
 
+  preventArrivalScroll() {},
+
+  onArrivalNoticeConfirm() {
+    if (this._noticeClosing) return;
+    this._noticeClosing = true;
+    const next = this._afterArrivalNotice;
+    this._afterArrivalNotice = null;
+    this._arrivalLocked = false;
+    this.setData({ arrivalNoticeVisible: false, submitting: false });
+    if (typeof next === "function") next();
+  },
+
+  _continueAfterTnrReminder(toastTitle, next) {
+    if ((this.data.form && this.data.form.category) !== "tnr") {
+      wx.showToast({ title: toastTitle, icon: "success" });
+      next();
+      return;
+    }
+    this._arrivalLocked = true;
+    this._noticeClosing = false;
+    this._afterArrivalNotice = next;
+    try { wx.hideKeyboard(); } catch (err) {}
+    this.setData({ arrivalNoticeVisible: true, submitting: false });
+  },
+
   async onSubmit() {
-    if (this.data.submitting) return;
+    if (this.data.submitting || this._arrivalLocked || this.data.arrivalNoticeVisible) return;
     this.setData({ submitting: true });
     try {
       if (!this.data.editMode && (!this.data.canBookTnr || this.data.form.category !== "tnr" || !this.data.form.related_application_id)) {
@@ -976,7 +1002,7 @@ Page({
           this.setData({ submitting: false });
           return;
         }
-        const res = await postJson(`/api/wechat/appointments/${this._editId}/update`, {
+        await postJson(`/api/wechat/appointments/${this._editId}/update`, {
           code: loginCode,
           store:            payload.store,
           appointment_date: payload.appointment_date,
@@ -987,8 +1013,9 @@ Page({
           pet_gender:       payload.pet_gender,
           notes:            payload.notes,
         });
-        wx.showToast({ title: "修改成功", icon: "success" });
-        wx.navigateBack();
+        this._continueAfterTnrReminder("修改成功", () => {
+          wx.navigateBack();
+        });
       } else {
         // ── 新建模式 ──
         // 美容：附加字段
@@ -999,12 +1026,13 @@ Page({
           payload.coat_length = this.data.form.coat_length;
         }
         const res = await postJson("/api/appointments/create", payload);
-        wx.showToast({ title: "预约已提交", icon: "success" });
-        if (res && res.appointment && res.appointment.id) {
-          wx.navigateTo({ url: `/pages/appointment/list?highlight=${res.appointment.id}` });
-        } else {
-          wx.navigateTo({ url: "/pages/appointment/list" });
-        }
+        this._continueAfterTnrReminder("预约已提交", () => {
+          if (res && res.appointment && res.appointment.id) {
+            wx.navigateTo({ url: `/pages/appointment/list?highlight=${res.appointment.id}` });
+          } else {
+            wx.navigateTo({ url: "/pages/appointment/list" });
+          }
+        });
       }
     } catch (e) {
       wx.showModal({
@@ -1013,7 +1041,7 @@ Page({
         showCancel: false
       });
     } finally {
-      this.setData({ submitting: false });
+      if (!this._arrivalLocked) this.setData({ submitting: false });
     }
   }
 });
